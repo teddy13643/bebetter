@@ -1,0 +1,9 @@
+[project]
+name = "bebetter-mcp"
+version = "0.1.0"
+description = "BeBetter 三式合參 MCP Server"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.27.0",
+]

@@ -11,7 +11,7 @@ try:
         run_bazi, run_western_astro, run_vedic_astro,
         interpret as core_interpret,
     )
-    from core.bazi import run_bazi_compat
+    from core.bazi import run_bazi_compat, bazi_from_pillars
     MODE = "direct"
 except ImportError:
     MODE = "http"
@@ -150,12 +150,8 @@ async def bazi_compat(
 gender_a/gender_b='男'或'女',影響大運順逆。"""
 
     if MODE == "direct":
-        bazi_a = run_bazi(0, 1, 1, 0)  # placeholder，下面會被覆蓋
-        bazi_b = run_bazi(0, 1, 1, 0)
-
-        # 用四柱字串覆蓋（不需要出生日期，直接從四柱構造）
-        bazi_a = _bazi_from_pillars(pillars_a)
-        bazi_b = _bazi_from_pillars(pillars_b)
+        bazi_a = bazi_from_pillars(pillars_a)
+        bazi_b = bazi_from_pillars(pillars_b)
 
         result = run_bazi_compat(bazi_a, bazi_b, gender_a, gender_b)
         return json.dumps(result, ensure_ascii=False, indent=2)
@@ -165,55 +161,6 @@ gender_a/gender_b='男'或'女',影響大運順逆。"""
         "gender_a": gender_a, "gender_b": gender_b,
     }
     return await _post("/bazi-compat", payload)
-
-
-def _bazi_from_pillars(pillars_str: str) -> dict:
-    """從八字四柱字串(如'庚午己丑癸未癸丑')構造 run_bazi() 相容的 dict"""
-    from core.constants import (
-        GAN_WUXING, GAN_YINYANG, ZHI_CANGGAN, WUXING_SHENG, WUXING_KE,
-    )
-    pairs = [(pillars_str[i], pillars_str[i + 1]) for i in range(0, 8, 2)]
-    day_master = pairs[2][0]
-
-    def shishen(tg):
-        if tg == day_master:
-            return "比肩"
-        dm_wx = GAN_WUXING[day_master]
-        tg_wx = GAN_WUXING[tg]
-        same_pol = GAN_YINYANG[day_master] == GAN_YINYANG[tg]
-        if dm_wx == tg_wx:
-            return "比肩" if same_pol else "劫財"
-        if WUXING_SHENG[dm_wx] == tg_wx:
-            return "食神" if same_pol else "傷官"
-        if WUXING_SHENG[tg_wx] == dm_wx:
-            return "偏印" if same_pol else "正印"
-        if WUXING_KE[dm_wx] == tg_wx:
-            return "偏財" if same_pol else "正財"
-        if WUXING_KE[tg_wx] == dm_wx:
-            return "七殺" if same_pol else "正官"
-        return ""
-
-    labels = ["年柱", "月柱", "日柱", "時柱"]
-    result_pillars = {}
-    wuxing = {"金": 0, "木": 0, "水": 0, "火": 0, "土": 0}
-    for i, (g, z) in enumerate(pairs):
-        cg = ZHI_CANGGAN[z]
-        result_pillars[labels[i]] = {
-            "天干": g, "地支": z, "干支": g + z,
-            "十神": shishen(g) if i != 2 else "日主",
-            "藏干": [{"天干": c, "十神": shishen(c)} for c in cg],
-        }
-        wuxing[GAN_WUXING[g]] += 1
-        for j, c in enumerate(cg):
-            wuxing[GAN_WUXING[c]] += 0.7 if j == 0 else 0.3
-
-    return {
-        "四柱": result_pillars,
-        "日主": day_master,
-        "日主五行": GAN_WUXING[day_master],
-        "日主陰陽": GAN_YINYANG[day_master],
-        "五行分布": {k: round(v, 1) for k, v in wuxing.items()},
-    }
 
 
 if __name__ == "__main__":
