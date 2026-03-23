@@ -6,6 +6,7 @@
 
 from core.constants import (
     GAN, ZHI, GAN_WUXING, GAN_YINYANG, ZHI_CANGGAN, ZHI_ORDER,
+    WUXING_SHENG, WUXING_KE,
     TIANGAN_WUHE, DIZHI_LIUHE, DIZHI_LIUCHONG, DIZHI_LIUHAI,
     DIZHI_PO, DIZHI_SANXING, DIZHI_ZIXING, DIZHI_SANHE, DIZHI_SANHUI,
     NAYIN, NAYIN_WUXING,
@@ -160,7 +161,7 @@ def enrich_bazi(bazi: dict, gender: str = "男") -> dict:
     year_p = pillars["年柱"]
     month_p = pillars["月柱"]
     day_p = pillars["日柱"]
-    hour_p = pillars["時柱"]
+    hour_p = pillars.get("時柱")
 
     day_pillar = day_p["干支"]
     year_pillar = year_p["干支"]
@@ -171,7 +172,11 @@ def enrich_bazi(bazi: dict, gender: str = "男") -> dict:
         "日柱": calc_nayin(day_pillar),
     }
     bazi["胎元"] = calc_taiyuan(month_p["天干"], month_p["地支"])
-    bazi["命宮"] = calc_minggong(year_p["天干"], month_p["地支"], hour_p["地支"])
+    # 命宮需要時柱地支，缺時柱時跳過
+    if hour_p:
+        bazi["命宮"] = calc_minggong(year_p["天干"], month_p["地支"], hour_p["地支"])
+    else:
+        bazi["命宮"] = None
     bazi["神煞"] = calc_shensha(day_p["天干"], day_p["地支"], year_p["地支"], month_p["地支"])
     bazi["大運"] = calc_dayun(year_p["天干"], month_p["天干"], month_p["地支"], gender)
 
@@ -181,11 +186,13 @@ def enrich_bazi(bazi: dict, gender: str = "男") -> dict:
 # ── 跨盤關係計算 ──
 
 def _collect_stems_branches(bazi: dict) -> tuple[list[str], list[str]]:
-    """從 bazi 結果收集四柱天干和地支"""
+    """從 bazi 結果收集天干和地支，缺時柱時只收三柱"""
     gans = []
     zhis = []
     for label in ["年柱", "月柱", "日柱", "時柱"]:
-        p = bazi["四柱"][label]
+        p = bazi["四柱"].get(label)
+        if p is None:
+            continue
         gans.append(p["天干"])
         zhis.append(p["地支"])
     return gans, zhis
@@ -377,6 +384,61 @@ def calc_hunyin_xiongsha(day_pillar_a: str, day_pillar_b: str) -> dict:
             "孤鸞煞": day_pillar_b in GULUAN_SHA,
             "陰差陽錯日": day_pillar_b in YINCHA_YANGCUO,
         },
+    }
+
+
+# ── 四柱字串 → run_bazi() 相容 dict ──
+
+def bazi_from_pillars(pillars_str: str) -> dict:
+    """從八字字串構造 run_bazi() 相容的 dict。
+
+    接受 6 字（三柱，缺時柱）或 8 字（四柱完整）。
+    缺時柱時四柱 dict 不含 "時柱" key，下游據此判斷。
+    """
+    length = len(pillars_str)
+    if length not in (6, 8):
+        raise ValueError(f"需要 6 或 8 個字，收到 {length} 個字")
+    pairs = [(pillars_str[i], pillars_str[i + 1]) for i in range(0, length, 2)]
+    day_master = pairs[2][0]
+
+    def shishen(tg):
+        if tg == day_master:
+            return "比肩"
+        dm_wx = GAN_WUXING[day_master]
+        tg_wx = GAN_WUXING[tg]
+        same_pol = GAN_YINYANG[day_master] == GAN_YINYANG[tg]
+        if dm_wx == tg_wx:
+            return "比肩" if same_pol else "劫財"
+        if WUXING_SHENG[dm_wx] == tg_wx:
+            return "食神" if same_pol else "傷官"
+        if WUXING_SHENG[tg_wx] == dm_wx:
+            return "偏印" if same_pol else "正印"
+        if WUXING_KE[dm_wx] == tg_wx:
+            return "偏財" if same_pol else "正財"
+        if WUXING_KE[tg_wx] == dm_wx:
+            return "七殺" if same_pol else "正官"
+        return ""
+
+    all_labels = ["年柱", "月柱", "日柱", "時柱"]
+    result_pillars = {}
+    wuxing = {"金": 0, "木": 0, "水": 0, "火": 0, "土": 0}
+    for i, (g, z) in enumerate(pairs):
+        cg = ZHI_CANGGAN[z]
+        result_pillars[all_labels[i]] = {
+            "天干": g, "地支": z, "干支": g + z,
+            "十神": shishen(g) if i != 2 else "日主",
+            "藏干": [{"天干": c, "十神": shishen(c)} for c in cg],
+        }
+        wuxing[GAN_WUXING[g]] += 1
+        for j, c in enumerate(cg):
+            wuxing[GAN_WUXING[c]] += 0.7 if j == 0 else 0.3
+
+    return {
+        "四柱": result_pillars,
+        "日主": day_master,
+        "日主五行": GAN_WUXING[day_master],
+        "日主陰陽": GAN_YINYANG[day_master],
+        "五行分布": {k: round(v, 1) for k, v in wuxing.items()},
     }
 
 
