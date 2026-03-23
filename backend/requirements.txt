@@ -1,8 +1,12 @@
 fastapi==0.115.6
 uvicorn==0.34.0
-kinqimen==0.0.6.6
 sxtwl==2.0.6
 ephem==4.1.5
+kinliuren==0.1.2.9
+kintaiyi==0.2.3
+numpy
+cn2an
 openai==1.58.1
 pydantic==2.10.4
 python-dotenv==1.0.1
+kerykeion>=4.0.0

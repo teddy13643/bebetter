@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from chart import router as chart_router
+from unified import router as unified_router
 
 app = FastAPI(title="BeBetter API")
 
@@ -12,7 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(chart_router, prefix="/api")
+app.include_router(unified_router, prefix="/api")
 
 
 @app.get("/api/health")
