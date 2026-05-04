@@ -125,6 +125,60 @@ NAVAMSA_ELEMENT_START = {
     "water": 3,  # Cancer
 }
 
+# 行星自然友敵關係（Naisargika Maitri）
+# 用於計算 dignity 強度：行星在友星座（friend's sign）力量增強，敵星座力量減弱
+# 結構：planet → {"friends": [...], "neutral": [...], "enemies": [...]}
+NAISARGIKA_MAITRI = {
+    "Sun":     {"friends": ["Moon", "Mars", "Jupiter"],   "neutral": ["Mercury"],                    "enemies": ["Venus", "Saturn"]},
+    "Moon":    {"friends": ["Sun", "Mercury"],            "neutral": ["Mars", "Jupiter", "Venus", "Saturn"], "enemies": []},
+    "Mars":    {"friends": ["Sun", "Moon", "Jupiter"],    "neutral": ["Venus", "Saturn"],            "enemies": ["Mercury"]},
+    "Mercury": {"friends": ["Sun", "Venus"],              "neutral": ["Mars", "Jupiter", "Saturn"],  "enemies": ["Moon"]},
+    "Jupiter": {"friends": ["Sun", "Moon", "Mars"],       "neutral": ["Saturn"],                     "enemies": ["Mercury", "Venus"]},
+    "Venus":   {"friends": ["Mercury", "Saturn"],         "neutral": ["Mars", "Jupiter"],            "enemies": ["Sun", "Moon"]},
+    "Saturn":  {"friends": ["Mercury", "Venus"],          "neutral": ["Jupiter"],                    "enemies": ["Sun", "Moon", "Mars"]},
+}
+
+# 焦傷距離（Combustion Orb）— 行星太靠近太陽（經度差）即視為焦傷，力量受損
+# 各家略有差異，這裡採 BPHS 主流值。Moon 也可焦傷但實務罕用，先不列
+COMBUSTION_ORB = {
+    "Mercury": 14.0,  # 逆行時 12°（暫不細分）
+    "Venus":   10.0,  # 逆行時 8°
+    "Mars":    17.0,
+    "Jupiter": 11.0,
+    "Saturn":  15.0,
+}
+
+# Yoga Karaka — 該上升星座的「同時掌管角宮 + 三方宮」的行星
+# 這顆星在該命主的盤裡天然就是大吉星（不需要其他條件配合）
+# 只有 6 個上升星座有天然 yoga karaka，其他上升要靠後天組合
+YOGA_KARAKAS = {
+    "Tau": "Saturn",   # Saturn 掌 9 (Cap) + 10 (Aqu)
+    "Can": "Mars",     # Mars 掌 5 (Sco) + 10 (Ari)
+    "Leo": "Mars",     # Mars 掌 4 (Sco) + 9 (Ari)
+    "Lib": "Saturn",   # Saturn 掌 4 (Cap) + 5 (Aqu)
+    "Cap": "Venus",    # Venus 掌 5 (Tau) + 10 (Lib)
+    "Aqu": "Venus",    # Venus 掌 4 (Tau) + 9 (Lib)
+}
+
+# Maraka 宮位（死亡相關）
+# 2 / 7 宮主可能成為「殺手」（Maraka），尤其在凶大限時
+MARAKA_HOUSES = [2, 7]
+
+# Marana Karaka Sthana（行星的「死亡位置」）
+# 行星在這些宮位天生效力衰弱（不論 dignity）
+# 不是「會死」的意思，是「該行星的能量在那個位置最難發揮」
+MARANA_KARAKA_STHANA = {
+    "Sun":     12,
+    "Moon":     8,
+    "Mars":     7,
+    "Mercury":  7,
+    "Jupiter":  3,
+    "Venus":    6,
+    "Saturn":   1,
+    "Rahu":     9,  # 部分典籍
+    "Ketu":     6,  # 部分典籍
+}
+
 # 分盤資訊
 VARGA_INFO = {
     "D2":  {"name": "Hora",            "zh": "時分盤",   "用途": "財富"},
