@@ -13,6 +13,7 @@ Yoga 是 Vedic 占星的精華，比單看行星位置更能反映命格特質�
 from core.vedic_constants import (
     SIGNS, SIGN_NAMES_ZH, SIGN_LORDS,
     EXALTATION, DEBILITATION, OWN_SIGNS,
+    COMBUSTION_ORB,
 )
 
 # 宮位英文 → 數字
@@ -87,6 +88,15 @@ YOGA_CATEGORY = {
     "Kemadruma":            ["警示"],
     "Shakata":              ["警示"],
     "Daridra":              ["警示"],
+    # 警示 / Dosha（新增）
+    "Mangal Dosha":         ["警示", "婚姻"],
+    "Guru Chandal":         ["警示", "信仰"],
+    "Combust":              ["警示"],
+    "Vish":                 ["警示", "情緒"],
+    "Grahan":               ["警示", "父母"],
+    "Pitra Dosha":          ["警示", "祖先業力"],
+    "Karako Bhava Nashaya": ["警示"],
+    "Mars-Saturn Conflict": ["警示"],
 }
 
 
@@ -464,6 +474,169 @@ DHANA_PAIRS = [
 ]
 
 
+def _check_mangal_dosha(planets: dict) -> list[dict]:
+    """Mangal Dosha（火星缺陷）：Mars 在 1/4/7/8/12 宮（從 Lagna 起算）
+    破解：Mars 廟旺（Aries/Scorpio）或高揚（Capricorn）→ 影響大幅減輕
+    主要影響：婚姻 / 親密關係 / 商業合作的挑戰
+    """
+    mars = planets.get("Mars")
+    if not mars or mars["house"] not in {1, 4, 7, 8, 12}:
+        return []
+    sign = mars["sign"]
+    cancelled = sign in OWN_SIGNS.get("Mars", []) or EXALTATION.get("Mars") == sign
+    nature = "中性（已破解）" if cancelled else "凶（婚姻挑戰）"
+    note = "（Mars 廟旺/高揚 → 已破解）" if cancelled else "（無破解條件）"
+    return [{
+        "名稱": "Mangal Dosha",
+        "中文": f"火星缺陷 Yoga（第{mars['house']}宮）",
+        "性質": nature,
+        "說明": f"Mars 在第 {mars['house']} 宮（{sign}）{note}",
+        "意義": "婚姻 / 親密關係 / 商業合作的挑戰：配偶火爆、衝突多、結婚晚、對方家庭難搞" + ("（已破解，影響大幅減輕）" if cancelled else ""),
+    }]
+
+
+# 「兩顆行星同宮」型 dosha — 表驅動
+# 新增規則 = 加一筆資料
+# (planet1, planet2, name, chinese_template, nature, meaning)
+CONJUNCTION_DOSHAS = [
+    ("Jupiter", "Rahu", "Guru Chandal (Rahu)", "木羅睺合 Yoga（第{h}宮）",
+     "凶（信仰挑戰）",
+     "對傳統信仰系統的衝突 / 反叛、精神導師議題、靈修上深度但古怪、與長輩在價值觀上拉扯"),
+    ("Jupiter", "Ketu", "Guru Chandal (Ketu)", "木計都合 Yoga（第{h}宮）",
+     "凶（信仰挑戰）",
+     "對傳統信仰系統的衝突 / 反叛、精神導師議題、靈修上深度但古怪、與長輩在價值觀上拉扯"),
+    ("Sun", "Rahu", "Pitra Dosha (Rahu)", "祖先業力 Yoga（Sun + 羅睺，第{h}宮）",
+     "凶（祖先業力）",
+     "祖先 / 父系業力未了、父親或長輩關係挑戰、繼承類議題、需透過儀式 / 修行清業"),
+    ("Sun", "Ketu", "Pitra Dosha (Ketu)", "祖先業力 Yoga（Sun + 計都，第{h}宮）",
+     "凶（祖先業力）",
+     "祖先 / 父系業力未了、父親或長輩關係挑戰、繼承類議題、需透過儀式 / 修行清業"),
+    ("Moon", "Rahu", "Grahan (Moon-Rahu)", "月亮羅睺蝕格（第{h}宮）",
+     "凶（業力）",
+     "母親 / 情緒相關的業力議題、安全感被遮蔽、母系挑戰"),
+    ("Moon", "Ketu", "Grahan (Moon-Ketu)", "月亮計都蝕格（第{h}宮）",
+     "凶（業力）",
+     "母親 / 情緒相關的業力議題、安全感被遮蔽、母系挑戰"),
+]
+
+
+def _check_conjunction_doshas(planets: dict) -> list[dict]:
+    """統一處理 CONJUNCTION_DOSHAS 表 — 兩顆行星同宮即觸發"""
+    found = []
+    for p1, p2, name, chinese_tmpl, nature, meaning in CONJUNCTION_DOSHAS:
+        pl1 = planets.get(p1)
+        pl2 = planets.get(p2)
+        if not pl1 or not pl2 or pl1["house"] != pl2["house"]:
+            continue
+        found.append({
+            "名稱": name,
+            "中文": chinese_tmpl.format(h=pl1["house"]),
+            "性質": nature,
+            "說明": f"{p1} 與 {p2} 同在第 {pl1['house']} 宮（{pl1['sign']}）",
+            "意義": meaning,
+        })
+    return found
+
+
+def _check_combust(planets: dict) -> list[dict]:
+    """焦傷檢查：行星距太陽經度差 < COMBUSTION_ORB → 該行星力量受損"""
+    sun = planets.get("Sun")
+    if not sun:
+        return []
+    sign_idx = {s: i for i, s in enumerate(SIGNS)}
+    sun_lon = sign_idx[sun["sign"]] * 30 + sun["deg"]
+    found = []
+    for planet, orb in COMBUSTION_ORB.items():
+        pl = planets.get(planet)
+        if not pl:
+            continue
+        pl_lon = sign_idx[pl["sign"]] * 30 + pl["deg"]
+        diff = abs(pl_lon - sun_lon)
+        if diff > 180:
+            diff = 360 - diff
+        if diff < orb:
+            found.append({
+                "名稱": f"Combust ({planet})",
+                "中文": f"{planet} 焦傷",
+                "性質": "凶（力量削弱）",
+                "說明": f"{planet} 距太陽 {diff:.2f}°（< 焦傷距 {orb}°）",
+                "意義": f"{planet} 力量被太陽光遮蔽 — 該行星主管領域要花更多力氣才能發揮，廟旺/高揚也救不了完全",
+            })
+    return found
+
+
+# 「兩顆行星合相 OR 互望」型 dosha — 表驅動
+# (p1, p2, name, chinese_template_with_{rel}, nature_default, meaning)
+# 合相時 nature 自動升級為「強衝突」（如有 nature_strong）
+ASPECT_DOSHAS = [
+    {
+        "planets": ("Moon", "Saturn"),
+        "name": "Vish",
+        "chinese_tmpl": "毒月 Yoga（{rel}）",
+        "nature": "凶（情緒）",
+        "nature_strong": "凶（強情緒衝擊）",
+        "meaning": "情緒沉重、容易內耗 / 抑鬱、母系或家庭氛圍嚴肅、安全感建立困難",
+    },
+    {
+        "planets": ("Mars", "Saturn"),
+        "name": "Mars-Saturn Conflict",
+        "chinese_tmpl": "火土衝突 Yoga（{rel}）",
+        "nature": "凶（中衝突）",
+        "nature_strong": "凶（強衝突）",
+        "meaning": "推進力（火）vs 紀律 / 限制（土）的反覆拉扯，做事容易自我消耗",
+    },
+]
+
+
+def _check_aspect_doshas(planets: dict) -> list[dict]:
+    """統一處理 ASPECT_DOSHAS 表 — 合相或互望即觸發"""
+    found = []
+    for d in ASPECT_DOSHAS:
+        p1, p2 = d["planets"]
+        pl1 = planets.get(p1)
+        pl2 = planets.get(p2)
+        if not pl1 or not pl2:
+            continue
+        if _conjunct(pl1["house"], pl2["house"]):
+            relation = "合相"
+            nature = d["nature_strong"]
+        elif _mutual_aspect(p1, pl1["house"], p2, pl2["house"]):
+            relation = "互望"
+            nature = d["nature"]
+        else:
+            continue
+        found.append({
+            "名稱": f"{d['name']} ({relation})",
+            "中文": d["chinese_tmpl"].format(rel=relation),
+            "性質": nature,
+            "說明": f"{p1}（第{pl1['house']}宮）與 {p2}（第{pl2['house']}宮）{relation}",
+            "意義": d["meaning"],
+        })
+    return found
+
+
+def _check_karako_bhava_nashaya(planets: dict) -> list[dict]:
+    """Karako Bhava Nashaya：行星 karaka 在自己主管的 bhava 反而削弱該 bhava
+    保守版：只查最廣泛被接受的兩個（Venus in 7、Jupiter in 5）
+    """
+    found = []
+    checks = [
+        ("Venus", 7, "婚姻", "婚姻宮", "婚姻品質受損 — 過度浪漫期待 vs 現實落差，配偶關係容易反覆"),
+        ("Jupiter", 5, "子女", "子女宮", "子女運受損 — 求子困難、子女緣薄、創意輸出不順"),
+    ]
+    for planet, house, theme, house_zh, meaning in checks:
+        pl = planets.get(planet)
+        if pl and pl["house"] == house:
+            found.append({
+                "名稱": f"Karako Bhava Nashaya ({planet})",
+                "中文": f"{theme}指示星削弱（{planet} 在第{house}宮）",
+                "性質": "凶（karaka 自傷）",
+                "說明": f"{planet}（{theme} karaka）落在第 {house} 宮（{house_zh}）",
+                "意義": meaning,
+            })
+    return found
+
+
 def _check_kemadruma(planets: dict) -> list[dict]:
     """Kemadruma Yoga（凶）：月亮 2/12 宮無行星（除太陽 + Rahu/Ketu）且不在角宮"""
     moon = planets.get("Moon")
@@ -830,6 +1003,12 @@ def detect_yogas(natal: dict) -> dict:
     formed.extend(_check_kalanidhi(planets))
     formed.extend(_check_daridra(planets, houses))
     formed.extend(_check_maha_bhagya(natal, planets))
+    # Dosha / 凶 yoga
+    formed.extend(_check_mangal_dosha(planets))               # 1-off pattern: Mars in 特定宮
+    formed.extend(_check_combust(planets))                    # 表驅動: COMBUSTION_ORB
+    formed.extend(_check_conjunction_doshas(planets))         # 表驅動: CONJUNCTION_DOSHAS（6 種）
+    formed.extend(_check_aspect_doshas(planets))              # 表驅動: ASPECT_DOSHAS（2 種）
+    formed.extend(_check_karako_bhava_nashaya(planets))       # 內嵌表 (2 entries)
 
     # 對每個成立的 yoga 補上分類欄位
     formed = [_tag_category(y) for y in formed]
