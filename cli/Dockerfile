@@ -5,19 +5,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
-    "mcp[cli]>=1.0.0" \
+    "httpx>=0.27.0" \
     "sxtwl==2.0.6" \
     "ephem==4.1.5" \
     "numpy" \
     "openai>=1.58.1" \
     "python-dotenv>=1.0.1" \
-    "kerykeion>=4.0.0" \
+    "kerykeion>=5.0.0" \
     && pip install --no-cache-dir --no-deps "kinqimen==0.0.6.6" \
     && pip install --no-cache-dir "kinliuren==0.1.2.9" \
     && pip install --no-cache-dir "kintaiyi==0.2.3"
 
 # build context 是 repo 根目錄，所以路徑從根目錄算
 COPY core/ ./core/
-COPY mcp/server.py .
+COPY cli/actions.py cli/cli.py ./
 
-ENTRYPOINT ["python", "server.py"]
+ENTRYPOINT ["python", "cli.py"]

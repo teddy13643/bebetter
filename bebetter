@@ -1,0 +1,14 @@
+#!/bin/bash
+# bebetter CLI wrapper — 透過 docker exec 進 bebetter-engine container 跑
+# core 套件已裝在 container 內,直接 import core 走 direct mode
+# 用法: bebetter <subcommand> [args...]
+# 子命令: bebetter --help
+
+CONTAINER="bebetter-engine"
+
+if ! docker ps --filter "name=^${CONTAINER}$" --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
+  echo "${CONTAINER} 沒在跑 — 先到 workspace/infra 跑 'make up-bebetter'" >&2
+  exit 1
+fi
+
+exec docker exec -e PYTHONPATH=/app "$CONTAINER" python /app/cli/cli.py "$@"
