@@ -12,6 +12,12 @@ RUN pip install --no-cache-dir \
     "openai>=1.58.1" \
     "python-dotenv>=1.0.1" \
     "kerykeion>=5.0.0" \
+    "pyjhora==4.8.5" \
+    "geocoder" \
+    "timezonefinder" \
+    "pytz" \
+    "geopy" \
+    "python-dateutil" \
     && pip install --no-cache-dir --no-deps "kinqimen==0.0.6.6" \
     && pip install --no-cache-dir "kinliuren==0.1.2.9" \
     && pip install --no-cache-dir "kintaiyi==0.2.3"

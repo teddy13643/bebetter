@@ -229,6 +229,7 @@ def calc_daily_transit(natal_moon_sign: str, natal_asc_sign: str,
             "從上升宮位": h_asc,
             "吉凶": "吉" if GOCHAR_RULES.get("Rahu", {}).get(h_moon, False) else "凶",
             "逆行": rahu.retrograde,
+            "dignity": _planet_dignity("Rahu", rahu.sign),
             "nakshatra": calc_nakshatra(rahu.abs_pos),
         }
     ketu = ts.true_south_lunar_node
@@ -244,6 +245,7 @@ def calc_daily_transit(natal_moon_sign: str, natal_asc_sign: str,
             "從上升宮位": h_asc,
             "吉凶": "吉" if GOCHAR_RULES.get("Ketu", {}).get(h_moon, False) else "凶",
             "逆行": ketu.retrograde,
+            "dignity": _planet_dignity("Ketu", ketu.sign),
             "nakshatra": calc_nakshatra(ketu.abs_pos),
         }
 
