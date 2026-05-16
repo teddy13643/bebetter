@@ -9,4 +9,10 @@ cn2an
 openai==1.58.1
 pydantic==2.10.4
 python-dotenv==1.0.1
-kerykeion>=4.0.0
+kerykeion>=5.0.0
+pyjhora==4.8.5
+geocoder
+timezonefinder
+pytz
+geopy
+python-dateutil

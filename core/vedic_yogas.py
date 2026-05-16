@@ -97,6 +97,20 @@ YOGA_CATEGORY = {
     "Pitra Dosha":          ["警示", "祖先業力"],
     "Karako Bhava Nashaya": ["警示"],
     "Mars-Saturn Conflict": ["警示"],
+    # Sanyasa 出家瑜伽
+    "Pravrajya":            ["出家", "靈性"],
+    "Sanyasa Yoga":         ["出家", "靈性"],
+}
+
+# Pravrajya 主導行星 → 出家派別（4+ 行星合相時最強的那顆決定）
+PRAVRAJYA_PATH = {
+    "Sun":     "Vanaprastha 隱士派（離群索居、回歸自然）",
+    "Moon":    "Brahmin 婆羅門派（吟唱、儀式、潔淨）",
+    "Mars":    "Tapasvi 苦行派（嚴格修行、自我鍛煉）",
+    "Mercury": "Bauddha 佛教派（觀照、智慧、辯經）",
+    "Jupiter": "Sanyasi 出家僧（典型出家、棄世）",
+    "Venus":   "Naga 蛇族修行（密續、本尊、咒語）",
+    "Saturn":  "Sakya 釋迦派（極簡苦行、無物所有）",
 }
 
 
@@ -915,6 +929,80 @@ def _check_maha_bhagya(natal: dict, planets: dict) -> list[dict]:
     return []
 
 
+def _check_sanyasa(planets: dict) -> list[dict]:
+    """Sanyasa / Pravrajya Yoga（出家瑜伽）
+
+    主要規則：
+    A. **Pravrajya（4+ 行星合相）**：4 顆或更多 visible 行星合相在同一宮 →
+       強烈出家傾向；最強的那顆決定派別（Pravrajya by 主導行星）
+    B. **Sanyasa from Moon**：月亮在 9 / 12 宮 + 月亮 dispositor 被 Saturn 望或合 →
+       靈性導向命格
+
+    現代解讀：未必真出家，可能是「對世俗事物淡薄、走修行 / 心理 / 哲學路線」。
+    """
+    formed = []
+    visible = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"]
+
+    # ----- A. Pravrajya（4+ 行星合相）-----
+    house_planets = {}
+    for p in visible:
+        if p in planets:
+            h = planets[p].get("house") or planets[p].get("宮位")
+            if h:
+                house_planets.setdefault(int(h), []).append(p)
+
+    for house, plist in house_planets.items():
+        if len(plist) >= 4:
+            # 簡化：先挑高揚的當主導，否則挑自宮，否則挑第一顆
+            def _sign_of(p):
+                s = planets[p].get("sign") or planets[p].get("星座", "")
+                return s[:3]
+            leader = None
+            for cand in plist:
+                if EXALTATION.get(cand) == _sign_of(cand):
+                    leader = cand
+                    break
+            if leader is None:
+                for cand in plist:
+                    if _sign_of(cand) in OWN_SIGNS.get(cand, []):
+                        leader = cand
+                        break
+            if leader is None:
+                leader = plist[0]
+            path = PRAVRAJYA_PATH.get(leader, "未明派別")
+            formed.append({
+                "名稱": "Pravrajya",
+                "中文": f"{len(plist)} 行星合相 Yoga（出家傾向）",
+                "性質": "中性（修行傾向）",
+                "說明": f"{len(plist)} 行星（{', '.join(plist)}）合相於第 {house} 宮",
+                "意義": f"靈性 / 哲學 / 出家命格，主導星 {leader} → {path}",
+            })
+            break  # 一個盤通常只成一次，不重複列
+
+    # ----- B. Sanyasa from Moon（月亮 9/12 + Saturn 影響其 dispositor）-----
+    moon = planets.get("Moon")
+    saturn = planets.get("Saturn")
+    if moon and saturn:
+        moon_house = moon.get("house") or moon.get("宮位")
+        moon_sign = moon.get("sign") or moon.get("星座", "")[:3]
+        if moon_house in (9, 12) and moon_sign:
+            disp = SIGN_LORDS.get(moon_sign)
+            if disp and disp in planets:
+                disp_house = planets[disp].get("house") or planets[disp].get("宮位")
+                saturn_house = saturn.get("house") or saturn.get("宮位")
+                if disp_house and saturn_house:
+                    if _aspect_or_conj("Saturn", int(saturn_house), disp, int(disp_house)):
+                        formed.append({
+                            "名稱": "Sanyasa Yoga",
+                            "中文": "土星影響月亮宮主 Yoga（出家傾向）",
+                            "性質": "中性（靈性導向）",
+                            "說明": f"月亮在第 {moon_house} 宮，其 dispositor {disp} 被 Saturn 望/合",
+                            "意義": "心思偏向出世、研究、隱修；對世俗成就淡薄",
+                        })
+
+    return formed
+
+
 def _tag_category(yoga: dict) -> dict:
     """對成立的 yoga 加上「分類」欄位，供下游分類彙整。
     名稱含括號變體（如 Maha Bhagya（男性版））用前綴匹配。"""
@@ -1003,6 +1091,7 @@ def detect_yogas(natal: dict) -> dict:
     formed.extend(_check_kalanidhi(planets))
     formed.extend(_check_daridra(planets, houses))
     formed.extend(_check_maha_bhagya(natal, planets))
+    formed.extend(_check_sanyasa(planets))
     # Dosha / 凶 yoga
     formed.extend(_check_mangal_dosha(planets))               # 1-off pattern: Mars in 特定宮
     formed.extend(_check_combust(planets))                    # 表驅動: COMBUSTION_ORB

@@ -213,35 +213,64 @@ def run_bazi(year: int, month: int, day: int, hour: int) -> dict:
     }
 
 
-def _run_astro(year: int, month: int, day: int, hour: int, minute: int,
-               lat: float, lng: float, tz_str: str,
-               zodiac_type: str, sidereal_mode: str = None) -> dict:
-    """占星排盤共用邏輯"""
-    from kerykeion import AstrologicalSubject
+def _create_astro_subject(year, month, day, hour, minute, lat, lng, tz_str,
+                          zodiac_type, sidereal_mode=None,
+                          houses_system_identifier="P"):
+    """建立 Kerykeion AstrologicalSubjectModel（含小行星）
+
+    houses_system_identifier:
+      "P" = Placidus（西洋占星標準）
+      "W" = Whole Sign（整宮制，Vedic 占星傳統主流）
+    """
+    from kerykeion import AstrologicalSubjectFactory
+    from kerykeion.settings.config_constants import DEFAULT_ACTIVE_POINTS
+
+    # 在預設基礎上開啟四大小行星，否則 ceres/pallas/juno/vesta 會是 None
+    active_points = DEFAULT_ACTIVE_POINTS + ["Ceres", "Pallas", "Juno", "Vesta"]
 
     kwargs = dict(
         name="Subject", year=year, month=month, day=day,
         hour=hour, minute=minute, lat=lat, lng=lng,
-        tz_str=tz_str, zodiac_type=zodiac_type,
+        tz_str=tz_str, zodiac_type=zodiac_type, online=False,
+        active_points=active_points,
+        houses_system_identifier=houses_system_identifier,
     )
     if sidereal_mode:
         kwargs["sidereal_mode"] = sidereal_mode
+    return AstrologicalSubjectFactory.from_birth_data(**kwargs)
 
-    subject = AstrologicalSubject(**kwargs)
 
+def _extract_planets_and_houses(subject, label: str) -> dict:
+    """從 Kerykeion subject 提取行星和宮位資料"""
     planet_attrs = [
         "sun", "moon", "mercury", "venus", "mars",
         "jupiter", "saturn", "uranus", "neptune", "pluto",
     ]
-    planets = {}
-    for attr in planet_attrs:
-        p = getattr(subject, attr)
-        planets[p.name] = {
+    extra_point_attrs = [
+        "true_north_lunar_node", "true_south_lunar_node",
+        "mean_lilith",
+        "chiron", "ceres", "pallas", "juno", "vesta",
+    ]
+
+    def _format_point(p):
+        return {
             "星座": p.sign,
             "度數": round(p.position, 2),
+            "絕對經度": round(p.abs_pos, 2),
             "宮位": p.house,
             "逆行": p.retrograde,
         }
+
+    planets = {}
+    for attr in planet_attrs:
+        p = getattr(subject, attr)
+        planets[p.name] = _format_point(p)
+
+    extra_points = {}
+    for attr in extra_point_attrs:
+        p = getattr(subject, attr, None)
+        if p is not None:
+            extra_points[p.name] = _format_point(p)
 
     house_ordinals = [
         "first", "second", "third", "fourth", "fifth", "sixth",
@@ -254,18 +283,121 @@ def _run_astro(year: int, month: int, day: int, hour: int, minute: int,
             "星座": h.sign,
             "度數": round(h.position, 2),
         }
+    # 真實 ASC 度數 — 整宮制下第1宮起點是星座 0°，但 ASC 實際位置要從 ascendant 拿
+    asc = getattr(subject, "ascendant", None)
+    if asc:
+        houses["第1宮"]["ASC_實際度數"] = round(asc.position, 2)
+        houses["第1宮"]["ASC_絕對經度"] = round(asc.abs_pos, 2)
 
-    label = "回歸黃道 (Tropical)" if zodiac_type == "Tropic" else f"恆星黃道 (Sidereal - {sidereal_mode})"
-    return {"制度": label, "行星": planets, "宮位": houses}
+    return {"制度": label, "行星": planets, "其他星體": extra_points, "宮位": houses}
 
 
 def run_western_astro(year: int, month: int, day: int, hour: int, minute: int,
                       lat: float, lng: float, tz_str: str = "Asia/Taipei") -> dict:
     """西洋占星排盤（回歸黃道）"""
-    return _run_astro(year, month, day, hour, minute, lat, lng, tz_str, "Tropic")
+    subject = _create_astro_subject(year, month, day, hour, minute, lat, lng, tz_str, "Tropic")
+    return _extract_planets_and_houses(subject, "回歸黃道 (Tropical)")
 
 
 def run_vedic_astro(year: int, month: int, day: int, hour: int, minute: int,
                     lat: float, lng: float, tz_str: str = "Asia/Taipei") -> dict:
-    """印度占星排盤（恆星黃道 Lahiri）"""
-    return _run_astro(year, month, day, hour, minute, lat, lng, tz_str, "Sidereal", "LAHIRI")
+    """印度占星排盤（恆星黃道 Lahiri）— 完整版
+
+    含：D1 + 17 張分盤（Varga）+ Yogas + Char Karakas + Ashtakavarga
+        + Bhava Karakas + Functional Nature + Shadbala 六種力量
+        + Nabhasa Yogas（32 種）+ 身宮盤 / 太陽盤
+    """
+    from core.vedic_pyjhora_adapter import (
+        compute_rasi, build_planets_and_houses, tz_offset_hours,
+    )
+    from core.vedic_varga import calc_varga_charts
+    from core.vedic_yogas import detect_yogas
+    from core.vedic_karaka import calc_char_karakas, compute_devatas
+    from core.vedic_ashtaka import calc_ashtakavarga
+    from core.vedic_shadbala import calc_shadbala
+    from core.vedic_nabhasa import detect_nabhasa
+    from core.vedic_lagna_charts import build_chandra_and_surya_lagna
+    from core.vedic_cross_insights import calc_cross_insights
+    from core.vedic_constants import (
+        BHAVA_KARAKA, FUNCTIONAL_NATURE_BY_ASC, FUNCTIONAL_NATURE_ZH,
+    )
+
+    # PyJHora 算盤（行星位置 / 整宮制宮位 / nakshatra / dignity 一次到位）
+    tz_off = tz_offset_hours(tz_str, year, month, day)
+    rasi = compute_rasi(year, month, day, hour, minute, lat, lng, tz_off)
+    ph = build_planets_and_houses(rasi)
+    result = {
+        "制度": "恆星黃道 (Sidereal - LAHIRI) / Whole Sign / PyJHora",
+        "行星": ph["行星"],
+        "其他星體": {},  # Vedic 純 9 graha；Rahu/Ketu 已併入「行星」
+        "宮位": ph["宮位"],
+    }
+    result["分盤"] = calc_varga_charts(result["行星"])
+    result["Yogas"] = detect_yogas(result)
+    result["Char_Karakas"] = calc_char_karakas(result["行星"])
+    ak_planet = result["Char_Karakas"].get("Atmakaraka", {}).get("行星")
+    d9_planets = result["分盤"].get("D9", {}).get("行星", {})
+    result["Devatas"] = compute_devatas(d9_planets, ak_planet)
+    asc_sign_full = result["宮位"]["第1宮"]["星座"]
+    asc_sign = asc_sign_full[:3]
+    result["Ashtakavarga"] = calc_ashtakavarga(result["行星"], asc_sign_full)
+
+    # ===== Bhava Karakas — 12 宮固定代表星 =====
+    bhava_karakas = {}
+    for h, info in BHAVA_KARAKA.items():
+        primary = info["primary"]
+        primary_state = result["行星"].get(primary, {})
+        bhava_karakas[f"第{h}宮"] = {
+            "主代表星":     primary,
+            "次代表星":     info["secondary"],
+            "主題":        info["theme"],
+            "主代表星狀態": {
+                "星座":   primary_state.get("星座"),
+                "宮位":   primary_state.get("宮位"),
+                "力量":   primary_state.get("力量"),
+            } if primary_state else None,
+        }
+    result["Bhava_Karakas"] = bhava_karakas
+
+    # ===== Functional Nature — 依上升決定每行星功能吉凶 =====
+    fn_table = FUNCTIONAL_NATURE_BY_ASC.get(asc_sign, {})
+    functional = {}
+    for planet, nature in fn_table.items():
+        functional[planet] = {
+            "性質":     nature,
+            "中文":     FUNCTIONAL_NATURE_ZH.get(nature, nature),
+        }
+    # Rahu/Ketu 動態判斷
+    for node in ("Rahu", "Ketu"):
+        if node in result["行星"]:
+            functional[node] = {
+                "性質": "dynamic",
+                "中文": "依合相 / dispositor 動態判斷",
+            }
+    result["Functional_Nature"] = {
+        "上升星座":    asc_sign,
+        "對照表":      functional,
+        "說明":       (
+            "依上升星座套標準 BPHS Kendra-Trikona 規則表，"
+            "yogakaraka 是該命主的天然吉星（最強）。"
+            "Rahu / Ketu 不在表中，由其合相星 / dispositor 動態決定性質。"
+        ),
+    }
+
+    # ===== Shadbala 六種力量 =====
+    result["Shadbala"] = calc_shadbala(result["行星"], asc_sign)
+
+    # ===== Nabhasa Yogas（32 種）=====
+    result["Nabhasa_Yogas"] = detect_nabhasa(result)
+
+    # ===== 身宮盤 / 太陽盤 =====
+    result["輔助命盤"] = build_chandra_and_surya_lagna(result)
+
+    # ===== Cross_Insights — 跨模組整合素材（不下結論）=====
+    result["Cross_Insights"] = calc_cross_insights(result)
+    result["生時精度警語"] = {
+        "D2_D3_D7_D9_D10_D12": "生時誤差 30 分鐘內結果穩定",
+        "D20_D24": "生時誤差 5 分鐘內結果穩定，超過建議用 Birth Time Rectification 校正",
+        "D30_D60": "生時對結果極度敏感，誤差 2 分鐘整張盤就不一樣，必須有醫院出生記錄或經過 Rectification 校正",
+    }
+    return result

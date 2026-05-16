@@ -199,3 +199,88 @@ VARGA_INFO = {
     "D45": {"name": "Akshavedamsa",    "zh": "四十五分盤", "用途": "父系遺產、整體性格"},
     "D60": {"name": "Shastiamsa", "zh": "六十分盤", "用途": "前世業力、靈魂功課"},
 }
+
+# Bhava Karaka — 12 宮的固定代表星（Parashara 系統）
+# 每宮主題的「天然代言人」，分析該宮主題時除了看宮主星，還要看代表星的狀態
+# 結構：house → {主代表星, 次代表星(可空), 中文主題}
+BHAVA_KARAKA = {
+    1:  {"primary": "Sun",     "secondary": [],                          "theme": "自我、體格、生命力"},
+    2:  {"primary": "Jupiter", "secondary": ["Mercury"],                 "theme": "家庭、財富、言語"},
+    3:  {"primary": "Mars",    "secondary": [],                          "theme": "勇氣、兄弟、努力"},
+    4:  {"primary": "Moon",    "secondary": ["Mercury"],                 "theme": "母親、家、心靈、學業基礎"},
+    5:  {"primary": "Jupiter", "secondary": [],                          "theme": "子女、智慧、創造、前世福德"},
+    6:  {"primary": "Mars",    "secondary": ["Saturn"],                  "theme": "疾病、敵人、債務、競爭"},
+    7:  {"primary": "Venus",   "secondary": [],                          "theme": "配偶、合夥、商業關係"},
+    8:  {"primary": "Saturn",  "secondary": [],                          "theme": "壽命、隱藏、深層轉化、繼承"},
+    9:  {"primary": "Jupiter", "secondary": ["Sun"],                     "theme": "法性、父親、上師、長途旅行"},
+    10: {"primary": "Mercury", "secondary": ["Sun", "Jupiter", "Saturn"], "theme": "事業、社會地位、行動力"},
+    11: {"primary": "Jupiter", "secondary": [],                          "theme": "收益、社交網絡、願望成就"},
+    12: {"primary": "Saturn",  "secondary": ["Ketu"],                    "theme": "損失、解脫、外國、潛意識"},
+}
+
+# Functional Nature — 依上升星座決定每顆行星的功能吉凶
+# 規則來源：BPHS / Phaladeepika 主流標準（Kendra-Trikona 規則 + Yogakaraka 認定）
+# 性質分四類：
+#   benefic     = 功能吉星（自然加分）
+#   malefic     = 功能凶星（自然扣分）
+#   neutral     = 中性（含 Maraka，看當下情境）
+#   yogakaraka  = 同掌角宮 + 三方宮，強力吉星（最強）
+# Rahu/Ketu 不收進此表 — 它們的功能依所合相 / dispositor 決定，動態判斷
+FUNCTIONAL_NATURE_BY_ASC = {
+    "Ari": {"Sun": "benefic", "Moon": "neutral", "Mars": "benefic", "Mercury": "malefic", "Jupiter": "benefic", "Venus": "neutral", "Saturn": "malefic"},
+    "Tau": {"Sun": "neutral", "Moon": "malefic", "Mars": "malefic", "Mercury": "benefic", "Jupiter": "malefic", "Venus": "benefic", "Saturn": "yogakaraka"},
+    "Gem": {"Sun": "malefic", "Moon": "neutral", "Mars": "malefic", "Mercury": "benefic", "Jupiter": "neutral", "Venus": "benefic", "Saturn": "benefic"},
+    "Can": {"Sun": "neutral", "Moon": "benefic", "Mars": "yogakaraka", "Mercury": "malefic", "Jupiter": "benefic", "Venus": "malefic", "Saturn": "malefic"},
+    "Leo": {"Sun": "benefic", "Moon": "malefic", "Mars": "yogakaraka", "Mercury": "malefic", "Jupiter": "benefic", "Venus": "neutral", "Saturn": "malefic"},
+    "Vir": {"Sun": "malefic", "Moon": "malefic", "Mars": "malefic", "Mercury": "yogakaraka", "Jupiter": "malefic", "Venus": "benefic", "Saturn": "benefic"},
+    "Lib": {"Sun": "malefic", "Moon": "neutral", "Mars": "neutral", "Mercury": "benefic", "Jupiter": "malefic", "Venus": "benefic", "Saturn": "yogakaraka"},
+    "Sco": {"Sun": "neutral", "Moon": "benefic", "Mars": "benefic", "Mercury": "malefic", "Jupiter": "benefic", "Venus": "malefic", "Saturn": "malefic"},
+    "Sag": {"Sun": "benefic", "Moon": "malefic", "Mars": "benefic", "Mercury": "malefic", "Jupiter": "benefic", "Venus": "malefic", "Saturn": "malefic"},
+    "Cap": {"Sun": "malefic", "Moon": "neutral", "Mars": "malefic", "Mercury": "benefic", "Jupiter": "malefic", "Venus": "yogakaraka", "Saturn": "benefic"},
+    "Aqu": {"Sun": "neutral", "Moon": "malefic", "Mars": "neutral", "Mercury": "benefic", "Jupiter": "malefic", "Venus": "yogakaraka", "Saturn": "benefic"},
+    "Pis": {"Sun": "malefic", "Moon": "benefic", "Mars": "benefic", "Mercury": "malefic", "Jupiter": "yogakaraka", "Venus": "malefic", "Saturn": "malefic"},
+}
+
+FUNCTIONAL_NATURE_ZH = {
+    "benefic":    "功能吉星",
+    "malefic":    "功能凶星",
+    "neutral":    "中性",
+    "yogakaraka": "瑜伽星（最強吉）",
+}
+
+# Naisargika Bala（自然力量）— Shadbala 第六項，每行星固定值（單位 Rupa，1 Rupa = 60 Virupa）
+# 來源：BPHS。土星最弱（8.6 V÷60 = 0.143 Rupa），太陽最強（60V = 1 Rupa）
+# 但傳統 Shadbala 直接用 Virupa（V），1 Rupa = 60 V
+NAISARGIKA_BALA = {
+    "Saturn":  8.57,   # = 60/7
+    "Mars":   17.14,   # = 60×2/7
+    "Mercury": 25.71,  # = 60×3/7
+    "Jupiter": 34.28,  # = 60×4/7
+    "Venus":  42.86,   # = 60×5/7
+    "Moon":   51.43,   # = 60×6/7
+    "Sun":    60.00,   # = 60×7/7
+}
+
+# Dik Bala（方位力量）— 每行星在某一宮（角宮）力量最強，對宮最弱
+# 角宮：1 = 東, 4 = 北, 7 = 西, 10 = 南
+# 規則：在最強宮給滿分 60V，對宮 0V，其他線性內插
+DIK_BALA_STRONG_HOUSE = {
+    "Jupiter": 1, "Mercury": 1,   # 東（1H）
+    "Moon":    4, "Venus":   4,   # 北（4H）
+    "Saturn":  7,                 # 西（7H）
+    "Sun":     10, "Mars":   10,  # 南（10H）
+}
+
+# 每顆行星的「廟旺度數」(Maximum Exaltation Point)
+# Sthana Bala 的 Uchcha Bala 計算用：行星距離高揚點的角度差→力量
+# 高揚點：Sun 10°牡羊, Moon 3°金牛, Mars 28°摩羯, Mercury 15°處女,
+#         Jupiter 5°巨蟹, Venus 27°雙魚, Saturn 20°天秤
+EXALTATION_DEGREE = {
+    "Sun":     (0,  10),   # (sign_idx, degree_in_sign) — Aries 10°
+    "Moon":    (1,   3),   # Taurus 3°
+    "Mars":    (9,  28),   # Capricorn 28°
+    "Mercury": (5,  15),   # Virgo 15°
+    "Jupiter": (3,   5),   # Cancer 5°
+    "Venus":   (11, 27),   # Pisces 27°
+    "Saturn":  (6,  20),   # Libra 20°
+}

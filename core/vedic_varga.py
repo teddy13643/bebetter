@@ -1,6 +1,6 @@
 """印度占星分盤（Varga Charts）計算模組
 
-從 Kerykeion AstrologicalSubject 的恆星黃道行星經度，
+從「行星」dict 的恆星黃道絕對經度，
 依 BPHS（Brihat Parashara Hora Shastra）規則計算 17 張分盤
 （D-2/3/4/6/7/8/9/10/12/16/20/24/27/30/40/45/60）。
 
@@ -11,21 +11,15 @@ D-6（疾病、敵對）和 D-8（壽命、意外）不在 BPHS 原典 Shodashva
 
 from math import floor
 
-from kerykeion import AstrologicalSubject
-
 from core.vedic_constants import (
     SIGNS, SIGN_NAMES_ZH, SIGN_ELEMENTS, NAVAMSA_ELEMENT_START, VARGA_INFO,
     EXALTATION, DEBILITATION, OWN_SIGNS,
 )
 
-# 要計算的行星（含羅睺計都）
-_PLANET_ATTRS = [
-    "sun", "moon", "mercury", "venus", "mars",
-    "jupiter", "saturn",
-]
-_NODE_ATTRS = [
-    ("true_north_lunar_node", "Rahu"),
-    ("true_south_lunar_node", "Ketu"),
+# 分盤計算的行星集合（含羅睺計都，不含外行星）
+_VARGA_PLANETS = [
+    "Sun", "Moon", "Mercury", "Venus", "Mars",
+    "Jupiter", "Saturn", "Rahu", "Ketu",
 ]
 
 
@@ -300,22 +294,18 @@ def _calc_single_varga(varga_key: str, planets_data: list[tuple[str, float]]) ->
     }
 
 
-def calc_varga_charts(subject: AstrologicalSubject) -> dict:
-    """從 Kerykeion subject 計算 17 張分盤
+def calc_varga_charts(planets: dict) -> dict:
+    """從「行星」dict 計算 17 張分盤
     （D-2/3/4/6/7/8/9/10/12/16/20/24/27/30/40/45/60）
 
+    planets: {行星名: {"絕對經度": float, ...}}（divination 的 result["行星"]）
     回傳格式：{"D2": {...}, "D3": {...}, ...}
     """
-    # 收集所有行星的 (name, abs_pos)
-    planets_data = []
-    for attr in _PLANET_ATTRS:
-        p = getattr(subject, attr)
-        planets_data.append((p.name, p.abs_pos))
-
-    for attr, name in _NODE_ATTRS:
-        node = getattr(subject, attr, None)
-        if node:
-            planets_data.append((name, node.abs_pos))
+    planets_data = [
+        (name, planets[name]["絕對經度"])
+        for name in _VARGA_PLANETS
+        if name in planets
+    ]
 
     return {
         key: _calc_single_varga(key, planets_data)
