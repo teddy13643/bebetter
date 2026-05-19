@@ -356,6 +356,133 @@ def calc_yongshen(bazi: dict) -> dict:
     }
 
 
+# ── 取格（格局）──
+# 子平法：以月令藏干透干定格。Phase 1 做八正格 + 建祿/月劫；
+# 外格（從／化／專旺）只標「疑似」不自動斷定，因外格誤判率高、需配合全局氣勢人工複核。
+
+_SHISHEN_TO_GE = {
+    "正官": "正官格", "七殺": "七殺格",
+    "正財": "正財格", "偏財": "偏財格",
+    "正印": "正印格", "偏印": "偏印格",
+    "食神": "食神格", "傷官": "傷官格",
+}
+
+# 每格的相神（成格所喜）與破神（破格所忌）。
+# 判定只看十神有沒有出現在原局，屬「結構傾向」；細部成敗仍需配合刑沖、
+# 虛實、有無解救，故相破並見時回「待細推」而非鐵口斷成敗。
+_GE_CHENGBAI = {
+    "正官格": {"相": ["正財", "偏財", "正印"], "破": ["傷官"]},
+    "七殺格": {"相": ["食神", "正印", "偏印"], "破": ["正財", "偏財"]},
+    "正財格": {"相": ["正官", "七殺", "食神", "傷官"], "破": ["劫財", "比肩"]},
+    "偏財格": {"相": ["正官", "七殺", "食神", "傷官"], "破": ["劫財", "比肩"]},
+    "正印格": {"相": ["正官", "七殺"], "破": ["正財", "偏財"]},
+    "偏印格": {"相": ["正財", "偏財", "正官", "七殺"], "破": []},
+    "食神格": {"相": ["正財", "偏財"], "破": ["偏印"]},
+    "傷官格": {"相": ["正財", "偏財", "正印"], "破": ["正官"]},
+    "建祿格": {"相": ["正官", "七殺", "正財", "偏財"], "破": []},
+    "月劫格": {"相": ["正官", "七殺", "正財", "偏財"], "破": []},
+}
+
+
+def calc_geju(bazi: dict) -> dict:
+    """取格（格局）：以月令藏干透干定格，附成敗初步判定
+
+    必須在 calc_yongshen 之後呼叫——疑似外格的判定要讀已算好的日主強弱分數。
+
+    回傳：
+    {
+        "格局": "正官格",
+        "取格依據": "月令亥本氣壬透月干",
+        "成敗": "成格" | "破格" | "待細推",
+        "說明": "結構傾向的一句話",
+        "疑似外格": "疑似從弱…需人工複核" | None,
+    }
+    """
+    dm = bazi["日主"]
+    dm_wx = bazi["日主五行"]
+    pillars = bazi["四柱"]
+    month_zhi = pillars["月柱"]["地支"]
+
+    # 局中其他天干（排除日主本身），與其對應的柱位，平行兩個 list
+    pos_keys = [k for k in ["年柱", "月柱", "時柱"] if k in pillars]
+    other_gan = [pillars[k]["天干"] for k in pos_keys]
+    pos_label = {"年柱": "年", "月柱": "月", "時柱": "時"}
+
+    cang = ZHI_CANGGAN[month_zhi]  # 月令藏干，本氣在 [0]
+
+    # 本氣→中氣→餘氣，找第一個透天干者定格；全不透則取月令本氣
+    ge_gan = None
+    jiju = f"月令{month_zhi}藏干皆不透，取本氣{cang[0]}"
+    for idx, cg in enumerate(cang):
+        if cg in other_gan:
+            ge_gan = cg
+            tier = ("本氣", "中氣", "餘氣")[idx] if idx < 3 else "藏干"
+            where = pos_label[pos_keys[other_gan.index(cg)]]
+            jiju = f"月令{month_zhi}{tier}{cg}透{where}干"
+            break
+    if ge_gan is None:
+        ge_gan = cang[0]
+
+    ss = _calc_shishen(dm, ge_gan)
+
+    # 月令為比劫 → 建祿（臨官）／月劫（帝旺，即陽刃）；其餘對八正格
+    if ss in ("比肩", "劫財"):
+        state = _CHANGSHENG_YANG.get(dm_wx, {}).get(month_zhi, "")
+        ge = "月劫格" if state == "帝旺" else "建祿格"
+        jiju = f"月令{month_zhi}為日主{('帝旺' if ge == '月劫格' else '臨官')}（{ss}）"
+    else:
+        ge = _SHISHEN_TO_GE.get(ss)
+
+    if ge is None:
+        return {
+            "格局": "未定格",
+            "取格依據": f"月令{month_zhi}定格十神為{ss}，未對應標準格",
+            "成敗": "待細推",
+            "說明": "結構特殊，建議人工複核",
+            "疑似外格": None,
+        }
+
+    # 成敗：原局十神（天干 + 各地支本氣）有沒有相神／破神
+    local_ss = {_calc_shishen(dm, g) for g in other_gan}
+    for k in ["年柱", "月柱", "日柱", "時柱"]:
+        if k in pillars:
+            local_ss.add(_calc_shishen(dm, ZHI_CANGGAN[pillars[k]["地支"]][0]))
+
+    rule = _GE_CHENGBAI.get(ge, {"相": [], "破": []})
+    xiang_hit = [x for x in rule["相"] if x in local_ss]
+    po_hit = [p for p in rule["破"] if p in local_ss]
+
+    if po_hit and not xiang_hit:
+        chengbai = "破格"
+        note = f"局見{'/'.join(po_hit)}破格、無相神救應（結構傾向）"
+    elif xiang_hit and not po_hit:
+        chengbai = "成格"
+        note = f"局見相神{'/'.join(xiang_hit)}護衛（結構傾向）"
+    elif xiang_hit and po_hit:
+        chengbai = "待細推"
+        note = f"相神{'/'.join(xiang_hit)}與破神{'/'.join(po_hit)}並見，成敗需配合刑沖虛實細推"
+    else:
+        chengbai = "待細推"
+        note = "無明顯相神或破神，屬普通格局"
+
+    # Phase 1：外格只標疑似不自動斷，用既有日主強弱分數當訊號
+    suspect = None
+    score = bazi.get("用神分析", {}).get("日主強弱", {}).get("分數")
+    if score is not None:
+        if score >= 70 and ss in ("比肩", "劫財"):
+            suspect = "疑似專旺／從旺格，需配合全局氣勢人工複核"
+        elif score <= 12:
+            suspect = "疑似從弱（從財／從殺／從兒）格，需配合全局氣勢人工複核"
+
+    return {
+        "格局": ge,
+        "取格依據": jiju,
+        "成敗": chengbai,
+        "說明": note,
+        "疑似外格": suspect,
+    }
+
+
 def calc_anhe_meaning(anhe_results: list) -> dict:
     """對暗合結果附加感情含義
 
@@ -434,6 +561,7 @@ def enrich_bazi(bazi: dict, gender: str = "男",
         onset_age=onset_age, birth_year=birth_year,
     )
     bazi["用神分析"] = calc_yongshen(bazi)
+    bazi["格局"] = calc_geju(bazi)
 
     return bazi
 
@@ -1484,6 +1612,7 @@ def run_bazi_fortune(pillars_str: str, gender: str = "男",
             "命宮": bazi.get("命宮"),
             "神煞": bazi.get("神煞"),
             "用神分析": bazi.get("用神分析"),
+            "格局": bazi.get("格局"),
         },
         "起運": bazi.get("起運"),
         "大運總覽": bazi.get("大運", []),
