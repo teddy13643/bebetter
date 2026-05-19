@@ -15,9 +15,17 @@ node_modules/
 cache/
 
 # IDE
-.claude/
 .idea/
 .vscode/
+
+# Claude Code：產品 skill 進版控；本機設定與個人生辰資料不進
+.claude/*
+!.claude/skills/
+.claude/skills/**/data/
+.claude/skills/**/examples/
+
+# 個人命理資料（含出生時間，repo 為 public 不進版控）
+CLAUDE.md
 
 # OS
 .DS_Store
